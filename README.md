@@ -1,4 +1,4 @@
-Automation tool for m3u8 video download by MMmpeg.
+It's an automation tool for m3u8 video downloading with MMmpeg.
 
 # Dependencies
 
