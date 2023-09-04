@@ -27,3 +27,9 @@ Use it with local http proxy:
 proxy_config = ("127.0.0.1", "10809")
 dlr = M3U8Downloader(out_dir, http_proxy=proxy_config)
 ```
+
+Dump FFmpeg log to see why some downloads failed:
+```python3
+ffmpeg_log_dir = './ffmpeg_log'
+dlr = M3U8Downloader(out_dir, ffmpeg_log_dir, log=logger)
+```
