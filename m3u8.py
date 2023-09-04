@@ -63,26 +63,28 @@ class M3U8Downloader:
             self.log.info(f"Skip duplicated name [{filename}].")
             return
         
-        # Run.
+        # Build up the command line.
         sarg_m3u8 = f"-i {m3u8}"
         cmd = f'ffmpeg {self._sarg_http_proxy} {sarg_m3u8} -c copy {out_path}'
         
         if self._ffmpeg_log_dir is not None:
             ffmpeg_log_filename = f'{timestamp}-{filename}.log'
-            log_path = self._ffmpeg_log_dir / ffmpeg_log_filename
-            with log_path.open('w+t') as f_log:
-                t_begin = datetime.now()
-                p = subprocess.run(cmd.split(), stdout=f_log, stderr=f_log)
+            ffmpeg_log_path = self._ffmpeg_log_dir / ffmpeg_log_filename
+            cmd += f' > "{ffmpeg_log_path}" 2>&1' # Combine the output and error stream and dump it as a file.
         else:
-            t_begin = datetime.now()
-            p = subprocess.run(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            ffmpeg_log_path = None
+        
+        # Run.
+        self.log.debug(f'Run cmd [{cmd}]')
+        t_begin = datetime.now()
+        p = subprocess.run(cmd, shell=True)
         duration = datetime.now() - t_begin
             
         if p.returncode == 0: 
             self.log.info(f'Successed. ({duration} used)')
         else: # The ffmpeg hasn't exited normally
             self.log.error(f'FFmpeg did NOT return properly.' +
-                           (f' Log dumped to {log_path}' if self._ffmpeg_log_dir else ''))
+                           (f' Log dumped to {ffmpeg_log_path}' if ffmpeg_log_path else ''))
             
 
 if __name__ == '__main__':
