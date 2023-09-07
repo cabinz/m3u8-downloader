@@ -1,13 +1,14 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import subprocess
 from pathlib import Path
 from utils.logger import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, level='DEBUG')
 
 class M3U8Downloader:
     def __init__(self, out_dir=".", ffmpeg_log_dir=None,
-                 http_proxy=None, log=logger) -> None:
+                 http_proxy=None, max_parallel_workers=1, log=logger) -> None:
         """Initialize the downloader with configuration.
 
         Args:
@@ -16,6 +17,8 @@ class M3U8Downloader:
                 Defaults to None for not dumping FFmpeg log.
             http_proxy (tuple, optional): String tuple of (ip address, port). 
                 Defaults to None (use no proxy).
+            max_parallel_workers: Max number of downloading tasks executed in parallel.
+                Defaults to 1.
             log (_type_, optional): The terminal logger for the downloader. Defaults to logger.
         """
         self.log = log
@@ -34,6 +37,10 @@ class M3U8Downloader:
                 self.log.info(f'Created {self._ffmpeg_log_dir} as the ffmpeg log directory.')
         else:
             self._ffmpeg_log_dir = None
+        
+        # Parallel.
+        self._executor = ThreadPoolExecutor(max_workers=max_parallel_workers)
+        self.log.info(f'The maximum number of parallel downloading is set to {max_parallel_workers}')
 
         # Proxy settings.
         if http_proxy is not None: 
@@ -42,6 +49,10 @@ class M3U8Downloader:
             self._sarg_http_proxy = f'-http_proxy {addr_http_proxy}'
         else:
             self._sarg_http_proxy = ''
+        
+    def __del__(self):
+        self.wait_and_shutdown()
+        self.log.info('Finished running. Destruct downloader.')
     
     def download(self, m3u8: str, filename: str):
         """Download a video designated by the given m3u8 file.
@@ -54,13 +65,12 @@ class M3U8Downloader:
         Returns:
             None
         """ 
-        self.log.info(f'Task [{filename}]')
         timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
                 
         # Output file path. Skip if the name already exists.
         out_path = self._out_dir/Path(filename)
         if out_path.exists():
-            self.log.info(f"Skip duplicated name [{filename}].")
+            self.log.warning(f"Skip duplicated name [{filename}].")
             return
         
         # Build up the command line.
@@ -74,18 +84,37 @@ class M3U8Downloader:
         else:
             ffmpeg_log_path = None
         
-        # Run.
-        self.log.debug(f'Run cmd [{cmd}]')
+        self._executor.submit(self._execute, cmd, task_title=filename, diag_file_path=ffmpeg_log_path)
+        self.log.info(f'Submitted task [{filename}]')
+        
+            
+    def _execute(self, cmd, task_title, diag_file_path):
+        """Execute the given downloading command. 
+        
+        This method will be submitted to the executor for pending.
+
+        Args:
+            cmd (str): The ffmpeg command to be executed.
+            task_title (str): Name to refer the submitted downloading task. Can be the downloaded file name.
+            diag_file_path (str): Path of the diagnostic log file for reference if task fails.
+                Can be the FFmpeg log file path.
+
+        Returns:
+            _type_: _description_
+        """
+        self.log.debug(f'Running cmd [{cmd}]...')
         t_begin = datetime.now()
         p = subprocess.run(cmd, shell=True)
         duration = datetime.now() - t_begin
             
         if p.returncode == 0: 
-            self.log.info(f'Successed. ({duration} used)')
+            self.log.info(f'Successed [{task_title}]. ({duration} used)')
         else: # The ffmpeg hasn't exited normally
             self.log.error(f'FFmpeg did NOT return properly.' +
-                           (f' Log dumped to {ffmpeg_log_path}' if ffmpeg_log_path else ''))
+                           (f' Log dumped to {diag_file_path}' if diag_file_path else ''))
             
+    def wait_and_shutdown(self):
+        self._executor.shutdown()
 
 if __name__ == '__main__':
     proxy_config = ("127.0.0.1", "10809")

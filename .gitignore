@@ -1,3 +1,5 @@
+out/
+
 # Ignore files starting with "local_"
 local_*
 
